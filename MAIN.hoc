@@ -1,0 +1,87 @@
+	load_file("nrngui.hoc")							
+	//load_file("layerV1.hoc")	//The morphology to use			
+	load_file("layer23_4.hoc")	//The morphology to use			
+	startseed=1		
+	runnum=0
+	insertHH=01
+	//****EXCITATORY CELLS
+
+	numINPUTperCELL=300	//number of presynaptic cells (inputs) to first generation
+	numINHIBINPUTperCELL=000
+	objref cell
+	//***INPUTS	
+	baselineISI=1e100		//frequesncy of basal firing (ms)
+	patternISI=10	//frequency of pattern firing (ms)
+	patternNUM=1		//number of pattern APs
+	patternSTART=10	//10 when pattern starts
+	patternEND=10//100
+	patternINHIBISI=100	//frequency of pattern firing (ms)
+	patternINHIBNUM=1		//number of pattern APs
+	patternINHIBSTART=100	//when pattern starts
+	patternINHIBEND=1100
+	//***ANALYSIS
+	spikethresh=-35	//min threshold for the NMDA spike
+	spikeminlen=30	//min duration of NDMA spike
+	placeterminal=1//puts synapses only on the terminal dends and their parents
+	numbetween=0//autoset by user selection of specific dendrites
+	
+	//****SYNAPTIC CONDUCTACES
+	gnmdamax=00.7
+	if (runnum>1){gnmdamax=0}
+
+	gampamax=0.3//.5
+	ggabamax=00.5
+	decayampa_glutamate=1
+	decaynmda_glutamate=1
+	n_glutamate=0.2
+	tau_ampa_glutamate=1
+	decaytime_gaba=6
+	//***ACTIVE	
+	na_s=0.5//1//2//.5
+	k_s=0.05//05//.2//15//0.01
+	km_s=0//0.03
+	na_d=0
+	k_d=0.01////.01
+	km_d=0//1
+	gpas=010000
+	//****OTHER OBJECTS and VARIABLES
+	objref rLOC,temp,temp2,rLOCINHIB,rTIME,rINHIBTIME,rISI,rINHIBISI//,rLATERAL,rFEEDF,rTIME,rINPUT,
+	objref ginputs,gVmain,shape,gSPIKE,nil,pc
+	pc = new ParallelContext()		
+
+	showdends=0//1
+	showsoma=1
+
+	randomseed=startseed
+	syncorr=01
+	
+
+
+	//****PROCEDURES
+	tstop = 60//1500//200
+	dt = 0.1	
+	v_init = -60
+	steps_per_ms = 10				
+
+	load_file("functions.hoc")	
+	
+
+	initrandom(0)
+
+	makecells(0)
+	active()
+		
+	objref gVmain
+	gVmain=new Graph(0)
+	gVmain.view(0,-60,tstop,60,950,280,500,230) 
+	if(showdends){
+		forall {//dends	
+			gVmain.addvar("v(0.5)",1,1)
+		}
+	}
+	gVmain.addexpr("cell.soma.v(0.5)",2,1)
+	graphList[0].append(gVmain)
+
+	load_file("net.ses")
+	init_plots_panels()
+		

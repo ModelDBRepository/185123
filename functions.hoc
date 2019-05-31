@@ -1,0 +1,893 @@
+	objref somaref,dendref,dendref2,strobj,dendgrouplist,temp
+
+	objref dendgroups[2]
+	
+	proc findgroupdist(){//prints the neartests distance between dendritic groups
+		objref dendref,dendref2
+		for groupcount1=0,dendgrouplist.count()-1{
+			access cell.soma
+			distance()
+			mind=10000
+			forsec dendgrouplist.o[groupcount1]{
+				if (distance(0.5)<mind){
+					mind=distance(0.5)
+					dendref=new SectionRef()
+				}
+			}
+			access dendref.sec
+			distance()
+			for groupcount2=groupcount1+1,dendgrouplist.count()-1{
+				mind=10000
+				forsec dendgrouplist.o[groupcount2]{
+					if (distance(0.5)<mind){
+						mind=distance(0.5)
+					}
+				}	
+				print groupcount1,groupcount2,mind
+			}
+		}
+	}
+	
+	proc initrandom(){//runs once at the beginning of the simulation
+		if ($1==0) {// designate distal 100um of the terminal dendrites to different groups
+			objref cell//[1][1] 
+			cell=new celltemplate(0,0)
+			forall {
+				if (insertHH==1){
+					insert HH// hh3
+					gnabar_HH=0
+					gkbar_HH=0
+					gkmbar_HH=0
+					NF_HH=0//.02
+					NFleak_HH=10
+					vshift_HH=-3
+				}
+				
+				insert pas
+				g_pas=1/10000
+			}
+
+
+			//morphology of the cell
+			objref somaref,dendref,dendref2,strobj
+			strobj = new StringFunctions()
+			cell.soma somaref=new SectionRef()
+			distance()
+			strdef st1
+			objref dendgrouplist,temp
+			dendgrouplist=new List()
+			countterm=0
+			terminaldistance=100//the distal part of terminal dendrites to select for stimulation
+			cell.segdends=new SectionList()
+			forsec cell.dends{	
+				dendref=new SectionRef()
+				if (distance(1)>terminaldistance){	//check is farther than 100um from soma
+					if (dendref.nchild==0){//for all terminal dends, check if their parent belongs to a group 
+						groupcount=0
+						found=0
+						
+						dendref.parent{ sectionname(st1)}
+						for groupcount=0,dendgrouplist.count()-1{//check if their parent belongs to a group
+							forsec dendgrouplist.o(groupcount){
+								if (strobj.substr(st1, secname())==0){//there is a group, add the child to it
+									found=1
+									dendref.sec dendgrouplist.o(groupcount).append()
+								}
+							}
+						}
+						
+						if (found==0){//the parent is not in a  group or the dend is long enough
+							temp=new SectionList()
+							dendref.sec temp.append()
+							if (L<terminaldistance){dendref.parent temp.append()}
+							dendgrouplist.append(temp)
+							cell.segdends.append()
+						}
+						
+					}
+				}
+			}
+
+		}
+
+		objref rLOC,rLOCINHIB,rTIME,rINHIBTIME,rISI,rINHIBISI//rLATERAL,rFEEDF,rINPUT,rLOCINHIB
+		rLOC=new Random(randomseed)
+		rLOCINHIB=new Random(randomseed)
+		rISI=new Random(randomseed)
+		rISI.ACG(randomseed+2)
+		rISI.normal(patternISI,patternISI)
+		rINHIBISI=new Random(randomseed)
+		rINHIBISI.ACG(randomseed+3)
+		rINHIBISI.normal(patternINHIBISI^0.5,patternINHIBISI)		
+		rTIME=new Random(randomseed)
+		rTIME.ACG(randomseed+4)
+		rTIME.uniform(patternSTART,patternEND)
+		rINHIBTIME=new Random(randomseed)
+		rINHIBTIME.ACG(randomseed+5)
+		rINHIBTIME.uniform(patternINHIBSTART,patternINHIBEND)
+	}
+	
+	objref rLOCbetween
+	proc randomplacement(){//places the input randomly on selected cell
+	//$1-1 excitatory, $0-inhibitory
+		objref temp,temp2,rLOCbetween
+		randomseed=randomseed+1
+		rLOCbetween=new Random(randomseed)
+		rLOCbetween.ACG(randomseed)
+		rLOC.ACG(randomseed)
+		
+		
+		newlocINHIB=rLOCINHIB.repick()
+		dendcount=0
+		length=0
+		
+		if ($1==1){
+			
+			if (numbetween==0){//random placement over the entire cell
+				if (placeterminal==0){//place over the entire cell
+					length=0	//the length of all the dendrites on the cell					
+					forsec cell.dends{length=length+L}	
+					newloc=rLOC.uniform(0,length)	
+					length=0					
+					forsec cell.dends{
+						dendcount=dendcount+1
+						if( (length<=newloc)&&(length+L>=newloc)){		//put synapse
+							temp=new glutamate_old((newloc-length)/L)	
+							temp.dend=dendcount	
+							temp.pos=(newloc-length)/L						
+							cell.Esyn.append(temp)
+						}
+						length=length+L				
+					}
+				}else{
+					length=0	//the length of all the dendrites on the cell					
+					forsec cell.segdends{length=length+L}	
+					newloc=rLOC.uniform(0,length)
+					length=0
+					forsec cell.segdends{
+						
+						if( (length<=newloc)&&(length+L>=newloc)){		//put synapse
+						
+							temp=new glutamate_old((newloc-length)/L)
+							objref dendref,strobj
+							strobj = new StringFunctions()	
+							strdef st1
+							dendref=new SectionRef()	
+							dendref.sec{ sectionname(st1)}
+							for groupcount=0,dendgrouplist.count()-1{//check the dend belongs to a group
+								forsec dendgrouplist.o(groupcount){							
+									if (strobj.substr(st1, secname())==0){
+										temp.dend=groupcount	
+									}
+								}
+							}
+							temp.pos=(newloc-length)/L						
+							cell.Esyn.append(temp)
+						}
+						length=length+L				
+					}					
+				}
+			}else{//place synapses on individual dendrites as defined by user
+				placed=0
+				
+				count=0
+				strdef st
+				for groupcount=0,dendgrouplist.count()-1{
+					if (placed==0){
+						sprint(st,"count=count+numINPUT%d", groupcount)
+						execute(st)
+						//print "c",count
+						if(count>cell.Esyn.count()){
+							length=0
+							forsec dendgrouplist.o(groupcount){
+								length=length+L
+							}
+						
+							dendcount=0
+							rLOCbetween.ACG(randomseed)
+							newloc=rLOCbetween.uniform(0,length)
+							randomseed=randomseed+1
+							
+							
+							//check that the input is not too close to the soma
+							tooclose=1
+							access cell.soma
+							distance()
+							maxdist=0
+							forsec dendgrouplist.o(groupcount){
+								if (distance(1)>maxdist){maxdist=distance(1)}
+							}
+							while(tooclose){
+								length=0
+								forsec dendgrouplist.o(groupcount){
+									if( (length<=newloc)&&(length+L>=newloc)){		
+										if (maxdist-distance((newloc-length)/L)>terminaldistance){
+											newloc=rLOCbetween.repick()
+										}else{tooclose=0}
+									}
+									length=length+L				
+								}
+							}
+							length=0
+							//print newloc,length
+							forsec dendgrouplist.o(groupcount){
+								//dendcount=dendcount+1
+								if( (length<=newloc)&&(length+L>=newloc)){		//put synapse
+									temp=new glutamate_old((newloc-length)/L)	
+									temp.dend=groupcount	
+									temp.pos=(newloc-length)/L						
+									cell.Esyn.append(temp)
+									placed=1
+									//print dendcount
+								}
+								length=length+L				
+							}
+						}							
+					}
+				}
+			}
+			
+		}
+	}
+
+	proc makecells(){//creates the cells and connects the inputs
+		if ($1==0){
+			cell.Esyn=new List()
+			cell.Isyn=new List()
+		}
+		for countinputs=0,numINPUTperCELL-1{
+			randomplacement(1)
+		}		
+	}
+
+	objref vectimes
+		
+	proc active(){//updates active parameters
+		initrandom(1)
+		forall {
+			if (insertHH==1){
+				gnabar_HH=na_d
+				gkbar_HH=k_d
+				gkmbar_HH=km_d
+			}
+			// gleak_HH=1/gpas
+			g_pas=1/gpas
+			e_pas=-60
+		}
+		if(insertHH==1){
+			access cell.soma
+			gnabar_HH=na_s
+			gkbar_HH=k_s
+			gkmbar_HH=km_s		
+		}
+		if (syncorr==0){//random
+			for i=0,cell.Esyn.count()-1{
+				cell.Esyn.o(i).del=rTIME.repick()
+				cell.Esyn.o(i).Tspike=rISI.repick()
+				cell.Esyn.o(i).Nspike=patternNUM
+			}
+		}
+		if (syncorr==1){//exact times on selected branches
+			for i=0,cell.Esyn.count()-1{
+				cell.Esyn.o(i).del=-1
+				cell.Esyn.o(i).Tspike=patternISI
+				cell.Esyn.o(i).Nspike=patternNUM
+			}
+			objref vectimes
+			if (placeterminal==0){
+				vectimes=new Vector(cell.numdend)
+				for subtreecount1=0,cell.numdend-1{
+					vectimes.x[subtreecount1]=rTIME.repick()
+				}
+			}else{
+				vectimes=new Vector(dendgrouplist.count())
+				//vectimes.fill(1e9)
+				for subtreecount1=0,dendgrouplist.count()-1{
+					vectimes.x[subtreecount1]=rTIME.repick()
+				}
+			}
+			for i=0,cell.Esyn.count()-1{
+				cell.Esyn.o(i).del=vectimes.x[cell.Esyn.o(i).dend]
+			}
+			
+		}		
+		gnmdamax_glutamate_old=gnmdamax
+		gampamax_glutamate_old=gampamax
+		gmax_gaba=ggabamax
+	}	
+	
+	proc init_plots_panels(){//PLOTS
+		objref ginputs,shape,INreptimes,gSPIKE
+		xpanel("RUN")
+			v_init = -60
+			xvalue("Init","v_init", 1,"stdinit()", 1, 1 )
+			xbutton("Init & Run","run()")
+			xbutton("Stop","stoprun=1")
+			xvalue("Tstop","tstop", 1,"tstop_changed()", 0, 1 )		
+			xvalue("t")
+			xbutton("Batch Run","batchrun()")
+			xbutton("Passive Params","passiveparams()")
+		xpanel(360,500)
+		
+		xpanel("PARAMETERS")
+			xvalue("# MAX","numINPUTperCELL", 1,"rebuild(0)")
+		//	xvalue("INHIB # MAX","numINHIBINPUTperCELL", 1,"rebuild(0)")
+			xlabel("INPUTS")
+			//xvalue("Base ISI","baselineISI", 1,"rebuild(0)")
+			//xvalue("Stim ISI","patternISI", 1,"rebuild(0)")
+			//xvalue("Stim START","patternSTART", 1,"rebuild(0)")
+			//xvalue("Stim END","patternEND", 1,"rebuild(0)")
+			//xvalue("# Stim","patternNUM", 1,"rebuild(0)")
+			xvalue("NMDA (nS)","gnmdamax", 1,"active()")
+			xvalue("AMPA (nS)","gampamax", 1,"active()")
+			xlabel("Active Params")
+			xvalue("Na Soma","na_s", 1,"active()")
+			xvalue("K Soma","k_s", 1,"active()")
+			xvalue("Km Soma","km_s", 1,"active()")
+			xvalue("Na Dend","na_d", 1,"active()")
+			xvalue("K Dend","k_d", 1,"active()")
+			xvalue("Km Dend","km_d", 1,"active()")
+			xvalue("Passive","gpas", 1,"active()")
+			
+		//	xvalue("INHIB Stim ISI","patternINHIBISI", 1,"rebuild(0)")			
+		//	xvalue("INHIB Stim START","patternINHIBSTART", 1,"rebuild(0)")
+		//	xvalue("INHIB Stim END","patternINHIBEND", 1,"rebuild(0)")
+		//	xvalue("INHIB # Stim","patternINHIBNUM", 1,"rebuild(0)")			
+		xpanel(50,160)
+		
+		xpanel("BETWEEN")
+		strdef dname,varname
+
+		for subtreecount1=0,dendgrouplist.count()-1{
+			sprint(dname, "Dend Group %d", subtreecount1)
+			sprint(varname, "numINPUT%d=0", subtreecount1)
+			execute(varname)
+			sprint(varname, "numINPUT%d", subtreecount1)
+			xvalue(dname,varname, 1,"rebuild(0)")
+		}
+		xpanel(50,590)
+
+	}
+
+
+
+	proc rebuild(){//makes new simulation parameters
+
+		randomseed=randomseed+1
+
+		numbetween=0
+		strdef st
+		for subtreecount1=0,dendgrouplist.count()-1{
+			sprint(st,"numbetween=numbetween+numINPUT%d",subtreecount1)
+			execute(st)
+			if (numbetween>0){numINPUTperCELL=numbetween}
+		}	
+
+		initrandom(1)
+		makecells($1)	
+		active()			
+	}
+	proc batchrun(){//changing the run parameters
+
+		xopen("execute.hoc")
+	}
+	objref NMDAspikevec
+	
+	proc calcNMDAspike(){//calculation of spike occurences
+			
+	//first make a list of all the dendrites with dendritic spike, as defined by length and height		
+		count=0
+		forsec cell.dends{
+			cell.spikevec[count]=new Vector(cell.Vvec[0].size())	
+			cell.spikevec[count].fill(0)
+			for timecount=1,cell.Vvec[0].size()-spikeminlen{//goes over the time points
+				if (cell.Vvec[count].x[timecount]>spikethresh){//above threshold
+					timestart=timecount*dt
+					while(cell.Vvec[count].x[timecount]>spikethresh){
+						if (timecount>=cell.Vvec[0].size()-1){break}
+						timecount=timecount+1
+					}
+					//print  cell.spikevec[count].size()-1,timestart/dt,timecount
+					if(timecount*dt-timestart>spikeminlen){cell.spikevec[count].fill(1,timestart/dt,timecount) }
+				}	
+			}
+			count=count+1
+		}
+		//new vector to count all the dends active during spike, tests each 10ms
+		objref NMDAspikevec
+		for timecount=1,(cell.Vvec[0].size()-1)/spikeminlen*dt{//every spikeminlen ms
+			NMDAspikevec=new Vector()			
+			//finds all the active dendrites at each time moment
+			i=0
+			forsec cell.dends{				
+				if (cell.spikevec[i].x[timecount*spikeminlen/dt]==1){NMDAspikevec.append(i)}
+					i=i+1
+			}
+			//then do clusters, start from the first one, and delete items from he list as you go
+			clusterdistance=100//um distance between dendrites
+			for countcluster1=0,NMDAspikevec.size()-1{
+				if (countcluster1>=NMDAspikevec.size()){break}
+				//init distance
+				i=0
+				forsec cell.dends{				
+					if (i==NMDAspikevec.x[countcluster1]){distance(0,0.5)  }
+					i=i+1
+				}			 
+			//check distances for all other dendrites, removes the item from the list
+				for countcluster2=countcluster1+1,NMDAspikevec.size()-1{				
+					if (countcluster2>=NMDAspikevec.size()){break}
+					i=0
+					stoptest=0
+					forsec cell.dends{	
+						if (stoptest==0){
+							if (i==NMDAspikevec.x[countcluster2]){
+								if(distance(1,0.5)<clusterdistance){NMDAspikevec.remove(countcluster2) stoptest=1}	
+							}
+						}
+						i=i+1
+					}					
+				}
+			}
+		}
+	}
+
+	//objref sec1,ic1,recv
+	objref fs
+	objref randD,randDN,numDS,expected,recOCbase,recOC,recIC,RGCsomaAP,netcon,nil,OClamp0,IClamp0
+
+	proc par_run_pas(){				
+		//executed on multiple cores (parallel processing)	
+		objref randD,randDN,numDS,recIC
+		randD=new Random()
+		randDN=new Random()
+		
+		numDS=new Vector(0)
+		//randDN.uniform(1,50)
+		strdef outstr	
+		
+		sec=randomseed						
+		if (unix_mac_pc()==1){						
+			system("date +%N",outstr)					
+			sscanf(outstr,"%i",&sec)					
+		}						
+		randomseed=sec+$1
+		randD.ACG(randomseed)
+		randDN.ACG(randomseed+1)
+		randD.uniform(0,dendgrouplist.count())
+		randDN.lognormal(150,8000)
+		randDN.repick()
+		for subtreecount1=0,dendgrouplist.count()-1{
+			sprint(st1, "numINPUT%d=0", subtreecount1)				
+			execute(st1)
+		}
+		//populate selected dends
+		
+		for i=1,countactive{
+			found=1
+			while (found==1){
+				placed=randD.repick()				
+				placenum=randDN.repick()
+				if (placenum<1){placenum=1}
+				found=0
+				sprint(st1,"if (numINPUT%d>0){found=1}",placed)
+				execute(st1) 
+			}
+			sprint(st1, "numINPUT%d=%d", placed,placenum)				
+			execute(st1)	
+			numDS.append(placed-placed%1)
+			numDS.append(placenum-placenum%1)
+		}
+
+		rebuild(0)
+		objref expected
+		expected=new Vector(tstop/dt+1)
+		expected.fill(0)		
+		for eachdend=0,countactive-1{//run over all dends
+			dendcount=-1
+			for i=0,cell.Esyn.count()-1{
+				cell.Esyn.o(i).del=1e9
+			}
+			for subtreecount1=0,dendgrouplist.count()-1{
+				
+				sprint(st1, "if (numINPUT%d>0){dendcount=dendcount+1}", subtreecount1)				
+				execute(st1)
+
+				if (dendcount==eachdend){//on the right branch
+					for i=0,cell.Esyn.count()-1{
+						if (cell.Esyn.o(i).dend==subtreecount1){
+							cell.Esyn.o(i).del=vectimes.x[cell.Esyn.o(i).dend]
+							
+						}
+					}
+					
+				}
+			}			
+			forall{finitialize(-60)}
+			stdinit()
+			run()
+
+			expected.add(cell.Vvec[cell.numdend])
+			expected.add(-e_pas)
+		}
+		//now do all branches together
+		for i=0,cell.Esyn.count()-1{
+			cell.Esyn.o(i).del=vectimes.x[cell.Esyn.o(i).dend]
+		}
+		t=0		
+
+		stdinit()		
+		run()
+		pc.post("done",$1,cell.Vvec[cell.numdend].max()-e_pas,expected.max(),numDS)
+
+	}
+	
+	proc par_run(){				
+		//executed on multiple cores (parallel processing)	
+		objref recOCbase,recOC,OClamp0,IClamp0
+		//run a baseline-for all workers
+		
+		savenmda=gnmdamax_glutamate_old	
+		saveampa=gampamax_glutamate_old	
+		access cell.soma
+		OClamp0=new OClamp(0.5)
+		OClamp0.vc=-60
+		OClamp0.rs=0.0001
+		OClamp0.on=0
+		OClamp0.off=1000
+		IClamp0=new IClamp(0.5)
+		IClamp0.dur=1000
+		IClamp0.del=0
+		
+		OClamp0.switched_on=1
+		gnmdamax_glutamate_old=0
+		gampamax_glutamate_old=0			
+		recOC=new Vector()
+		recOC.record(&OClamp0.i)
+
+		forall{finitialize(-60)}
+		stdinit()
+		run()		//run-baseline
+		recOCbase=new Vector(recOC.size())
+		recOCbase.copy(recOC)		
+		gnmdamax_glutamate_old=savenmda
+		gampamax_glutamate_old=saveampa
+		
+		objref randD,randDN,numDS
+		randD=new Random()
+		randDN=new Random()
+		
+		numDS=new Vector(0)
+		strdef outstr	
+		
+		sec=randomseed						
+		if (unix_mac_pc()==1){						
+			system("date +%N",outstr)					
+			sscanf(outstr,"%i",&sec)					
+		}						
+		randomseed=sec+$1
+		
+		randD.ACG(randomseed)
+		randDN.ACG(randomseed+1)
+		randD.uniform(0,dendgrouplist.count())
+		randDN.lognormal(200,1)
+		randDN.repick()
+		for subtreecount1=0,dendgrouplist.count()-1{
+			sprint(st1, "numINPUT%d=0", subtreecount1)				
+			execute(st1)
+		}
+		//populate selected dends
+		
+		for i=1,countactive{
+			found=1
+			while (found==1){
+				placed=randD.repick()				
+				placenum=randDN.repick()
+				if (placenum<1){placenum=1}
+				found=0
+				sprint(st1,"if (numINPUT%d>0){found=1}",placed)
+				execute(st1) 
+			}
+			sprint(st1, "numINPUT%d=%d", placed,placenum)				
+			execute(st1)	
+			numDS.append(placed-placed%1)
+			numDS.append(placenum-placenum%1)
+		}
+
+		rebuild(0)
+		objref expected
+		//expected=new Vector($o2.size())
+		expected=new Vector(recOC.size())
+		expected.fill(0)		
+		for eachdend=0,countactive-1{//run over all dends
+			dendcount=-1
+			for i=0,cell.Esyn.count()-1{
+				cell.Esyn.o(i).del=1e9
+			}
+			for subtreecount1=0,dendgrouplist.count()-1{
+				
+				sprint(st1, "if (numINPUT%d>0){dendcount=dendcount+1}", subtreecount1)				
+				execute(st1)
+
+				if (dendcount==eachdend){//on the right branch
+					for i=0,cell.Esyn.count()-1{
+						if (cell.Esyn.o(i).dend==subtreecount1){
+							cell.Esyn.o(i).del=vectimes.x[cell.Esyn.o(i).dend]
+							
+						}
+					}
+					
+				}
+			}	
+			//dynamic clamp
+			gnmdamax_glutamate_old=savenmda
+			gampamax_glutamate_old=saveampa			
+			OClamp0.switched_on=1
+			forall{finitialize(-60)}
+			stdinit()
+			run()		//voltage clamp
+			recIC=new Vector(recOC.size())
+			recIC.copy(recOC)
+			recIC.sub(recOCbase)
+			recIC.mul(-1)
+			expected.add(recIC)
+
+		}
+		//expected dynamic clamp
+		gnmdamax_glutamate_old=0
+		gampamax_glutamate_old=0
+		OClamp0.switched_on=0
+		IClamp0.dur=1000			
+		IClamp0.del=0
+		expected.play(&IClamp0.amp,.1)	
+		forall{finitialize(-60)}
+		stdinit()
+		run()
+		expectednumAP=RGCsomaAP.size()
+		expected.fill(0)
+		//now do all branches together
+		for i=0,cell.Esyn.count()-1{
+			cell.Esyn.o(i).del=vectimes.x[cell.Esyn.o(i).dend]
+		}
+		t=0	
+		gnmdamax_glutamate_old=savenmda
+		gampamax_glutamate_old=saveampa
+		stdinit()		
+		run()
+		pc.post("done",$1,RGCsomaAP.size(),expectednumAP,numDS)
+
+	}
+	
+	objref actualV,expectedV,numDSs[2]
+	proc brun(){
+		RGCsomaAP=new Vector()						
+		netcon=new NetCon(&cell.soma.v(0.5),nil)         //AP count	
+		netcon.record(RGCsomaAP)						
+		netcon.threshold=-10	
+
+		
+		objref fs,numDS
+		strdef st1
+		fs=new File()
+		if (unix_mac_pc()==1){					
+			sprint(st1,"$(HOME)/Network/OUTPUT/data%d.dat",startseed)	
+		}else{		
+			sprint(st1,"OUTPUT/data%d.dat",startseed)
+		}
+		fs.wopen(st1)
+		numDS=new Vector()
+		//******************//
+		numruns=1
+		if(startseed==1){countactive=2}
+		if(startseed==2){countactive=3}
+		if(startseed==3){countactive=4}
+		if(startseed==4){countactive=5}
+		if(startseed==5){countactive=10}
+		objref actualV,expectedV,numDSs[numruns]
+		actualV=new Vector(numruns)
+		actualV.fill(0)
+		expectedV=new Vector(numruns)
+		expectedV.fill(0)		
+		index=0
+		EPSPa=0
+		EPSPe=0
+
+		//ready for other workers to join in
+		pc.runworker()////
+		for runi=0,numruns-1{ 
+			pc.submit(runi,"par_run",runi)
+			numDSs[runi]=new Vector()
+		}
+		while (pc.working()) {						
+			pc.take("done",&index,&EPSPa,&EPSPe,numDS)			
+			actualV.x[index]=EPSPa
+			expectedV.x[index]=EPSPe
+		//	print EPSPa,EPSPe
+			numDSs[index].append(numDS)
+		}
+		pc.done()
+		for savei=0,numruns-1{
+			strdef printst
+			printst=""
+			for i=0,numDSs[0].size()-1{sprint(printst,"%s	%g",printst,numDSs[savei].x[i])}
+			fs.printf("%s	%g	%g\n",printst,expectedV.x[savei],actualV.x[savei])
+		}
+		fs.close()
+	}
+
+
+
+	
+	proc brunpas(){
+		objref fs,numDS
+		strdef st1
+		fs=new File()
+		if (unix_mac_pc()==1){					
+			sprint(st1,"$(HOME)/Network/OUTPUT/data%d.dat",startseed)	
+		}else{		
+			sprint(st1,"OUTPUT/data%d.dat",startseed)
+		}
+		fs.wopen(st1)
+		numDS=new Vector()
+		//******************//
+		numruns=4000
+		if(startseed==1){countactive=2}
+		if(startseed==2){countactive=3}
+		if(startseed==3){countactive=4}
+		if(startseed==4){countactive=5}
+		if(startseed==5){countactive=10}
+		objref actualV,expectedV,numDSs[numruns]
+		actualV=new Vector(numruns)
+		actualV.fill(0)
+		expectedV=new Vector(numruns)
+		expectedV.fill(0)		
+		index=0
+		EPSPa=0
+		EPSPe=0
+		pc.runworker()////
+		for runi=0,numruns-1{ 
+			pc.submit(runi,"par_run",runi)
+			numDSs[runi]=new Vector()
+		}
+		while (pc.working()) {						
+			pc.take("done",&index,&EPSPa,&EPSPe,numDS)			
+			actualV.x[index]=EPSPa
+			expectedV.x[index]=EPSPe
+			numDSs[index].append(numDS)
+		}
+		pc.done()
+		for savei=0,numruns-1{
+			strdef printst
+			printst=""
+			for i=0,numDSs[0].size()-1{sprint(printst,"%s	%g",printst,numDSs[savei].x[i])}
+			fs.printf("%s	%g	%g\n",printst,expectedV.x[savei],actualV.x[savei])
+		}
+		fs.close()
+	}
+	
+	
+	proc run_calc_save(){
+		finitialize()
+		frecord_init()
+		fcurrent()
+		stdinit()
+		tstep=1
+		stoprun=0
+		while ((t < tstop)&&(stoprun==0)) {
+			continuerun(t + tstep)// stoprun=1
+			sumnmda=0
+			sumampa=0
+			sumgaba=0
+			for i=0,cell.Esyn.count()-1{
+				sumnmda=sumnmda+cell.Esyn.o(i).gnmda
+				sumampa=sumampa+cell.Esyn.o(i).gampa
+			}
+			for i=0,cell.Isyn.count()-1{
+				sumgaba=sumgaba+cell.Isyn.o(i).ggaba
+			}			
+
+        // print results to filename
+		}
+
+		for i=0,cell.Esyn.count()-1{
+			//fs2.printf("%g	%g	%g\n",cell.Esyn.o(i).del,cell.Esyn.o(i).dend,cell.Esyn.o(i).pos)
+		}
+
+		calcNMDAspike()
+	}
+	
+	func calcdur(){
+		startloc=-1
+		endloc=-1
+		for i=0,cell.Vvec[cell.numdend].size()-1{
+			if (cell.Vvec[cell.numdend].x[i]>(cell.Vvec[cell.numdend].max()+60)/2-60){
+				if (startloc==-1){startloc=i}
+				endloc=i
+			}
+		}
+		if (na_max_s>0){return cell.apvec.size()}else{return (endloc-startloc)*dt}
+	}
+	
+	proc dendmorph(){
+		objref fs
+		fs=new File()
+		fs.wopen("OUTPUT/morphX.dat")
+		//forall {fs.printf("%s	%g	%g	%g	%g	%g\n",secname(),x3d(0),x3d(n3d()-1),y3d(0),y3d(n3d()-1),diam)}
+		forall{	for i=0,n3d()-1{fs.printf("%g	",x3d(i))}fs.printf("\n")}
+		fs.close()
+		fs.wopen("OUTPUT/morphY.dat")
+		forall{	for i=0,n3d()-1{fs.printf("%g	",y3d(i))}fs.printf("\n")}
+		fs.close()
+	}
+	objref sec1,ic1,recv
+	proc passiveparams(){
+		objref sec1,ic1,recv
+		access cell.soma
+		distance()
+		gampamax=0
+		gnmdamax=0
+		tstop =200
+		active()
+		//soma size
+		print "Soma size:IR:Numdend:IR"
+		print L*diam*diam*PI/4
+		recv=new Vector()
+		recv.record(&v(0.5))
+		ic1=new IClamp(0.5)
+		ic1.dur=400
+		ic1.del=10
+		ic1.amp=0.1
+		run()
+		//soma IR
+		print (recv.max()+60)*10
+		//number of terminal dends
+		print "TOTAL"
+		forsec cell.dends(){
+			sec1=new SectionRef()
+			if ((sec1.nchild==0)&&(L>30)){print secname()}
+		}
+		ndend=0
+		totalL=0
+		ir=0
+		count=0
+		print "IR"
+		forsec cell.dends(){
+			totalL=totalL+L
+			recv=new Vector()
+			recv.record(&v(0.5))
+			ic1=new IClamp(0.5)
+			ic1.dur=400
+			ic1.del=10
+			ic1.amp=0.1
+			run()
+			ndend=ndend+1 
+			print (recv.max()+60)*10		
+		}
+		print "L"
+		forsec cell.dends(){print L}		
+		print "totalL"
+		print totalL	
+		print "TERMINAL"	
+		print "terminalIR"		
+		forsec cell.dends(){
+			sec1=new SectionRef()
+			if ((sec1.nchild==0)&&(L>30)){
+				recv=new Vector()
+				recv.record(&v(0.5))
+				ic1=new IClamp(0.5)
+				ic1.dur=400
+				ic1.del=10
+				ic1.amp=0.1
+				run()
+				ndend=ndend+1 
+				print (recv.max()+60)*10
+				count=count+1
+			}
+		}
+		//print ndend
+		print "terminalL"
+		forsec cell.dends(){
+			sec1=new SectionRef()
+			if ((sec1.nchild==0)&&(L>30)){print L}	
+		}
+	}
+	

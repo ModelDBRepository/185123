@@ -1,0 +1,282 @@
+		objref fs,fs2,fs3,fs4
+		objref expected
+		objref randD,randDN
+		fs=new File()
+		fs2=new File()
+		fs3=new File()
+		fs4=new File()
+		if (runnum==0){
+			strdef st1
+			sprint(st1,"OUTPUT/dends%d.dat",startseed)
+			fs.wopen(st1)	
+			//fs2.wopen("OUTPUT/synlocE.dat")	
+			//fs3.wopen("OUTPUT/synlocI.dat")	
+			//fs4.wopen("OUTPUT/V.dat")	
+			//fs4.wopen("OUTPUT/Width.dat")	
+		}else{
+			fs.wopen("OUTPUT/peakVna.dat")	
+			fs4.wopen("OUTPUT/Widthna.dat")	
+		//	fs.wopen("OUTPUT/matrix11.dat")	
+		//	fs2.wopen("OUTPUT/matrix12.dat")	
+		}
+		exptype=6//5	//user selects the simulation to run
+		//1: 	running with different ISI
+		//2:	save simple simulation
+		//3: 	do synaptic activation, record current and then do dynamic clamp
+		//4:	activate all dendrites
+		//5: 	run on selected dendrites
+		//6:	calc summation between dends
+		if (exptype==1){
+			for (countrun=30;countrun<=50;countrun=countrun+10){
+			//for (countrun=5;countrun<=105;countrun=countrun+5){
+				for ISIcounter=6,6{
+					if (ISIcounter==1){ISI=1}
+					if (ISIcounter==2){ISI=10}
+					if (ISIcounter==3){ISI=20}
+					if (ISIcounter==4){ISI=50}
+					if (ISIcounter==5){ISI=100}
+					if (ISIcounter==6){ISI=200}
+					if (ISIcounter==7){ISI=500}
+					if (ISIcounter==8){ISI=1000}
+					patternSTART=50
+					patternEND=patternSTART+ISI
+					numINPUTperCELL=countrun*ISI
+					patternINHIBSTART=patternSTART
+					patternINHIBEND=patternEND+50
+					for (inhibrun=0;inhibrun<=10;inhibrun=inhibrun+1){
+						numINHIBINPUTperCELL=(numINPUTperCELL/10*inhibrun)
+						// fs.printf("%g	%g	",countrun,inhibrun)
+				// fs.printf("%g	",countrun)
+						rebuild(0)
+						 Voff_glutamate_old=0
+						 tstop=patternEND+100
+						 run()
+						// fs.printf("%g	",cell.Vvec[cell.numdend].max()-cell.Vvec[cell.numdend].x[patternSTART/dt])
+						 fs4.printf("%g	",calcdur())
+						 Voff_glutamate_old=1
+						 run()
+						 //fs.printf("%g	",cell.Vvec[cell.numdend].max()-cell.Vvec[cell.numdend].x[patternSTART/dt])
+						 fs4.printf("%g	",calcdur())
+						 savemax=gnmdamax
+						 gnmdamax=0
+						 active()
+						 run()
+					//	 fs.printf("%g\n",cell.Vvec[cell.numdend].max()-cell.Vvec[cell.numdend].x[patternSTART/dt])					
+						fs4.printf("%g\n",calcdur())			 
+						 gnmdamax=savemax
+						}
+				 }
+			}										
+		}
+		if (exptype==2){
+			//for runcountme=1,10{
+				rebuild(0)
+				run_calc_save()
+			//}
+		}
+		objref RGCsomaAP,netcon,nil	,recIV,recV2,recOC
+		if (exptype==3){//do synaptic activation, record current and then do dynamic clamp
+			//numINPUTperCELL=10
+			objref recIV,recV2,recOC
+			for subtreecount1=0,dendgrouplist.count()-1{
+				sprint(st1, "numINPUT%d=1", subtreecount1)				
+				execute(st1)
+			}	
+			savenmda=gnmdamax_glutamate_old	
+			saveampa=gampamax_glutamate_old					
+			rebuild(0)
+			OClamp[0].vc=-60
+			OClamp[0].rs=0.0001
+			OClamp[0].switched_on=1
+			gnmdamax_glutamate_old=0
+			gampamax_glutamate_old=0			
+			recIV=new Vector()
+			recIV.record(&OClamp[0].i)
+			run_calc_save()		//first run-baseline
+			gnmdamax_glutamate_old=savenmda
+			gampamax_glutamate_old=saveampa
+
+			recOC=new Vector(recIV.size())
+			recOC.copy(recIV)
+			run_calc_save()		//second run-synaptic input
+			recIV.sub(recOC)
+			recV2=new Vector(recIV.size())
+			recV2.copy(recIV)
+			recV2.mul(-1)
+			//recV2.fill(0,0,99)
+			OClamp[0].switched_on=0
+			IClamp[0].dur=1000			
+			recV2.play(&IClamp[0].amp,.1)
+			//run_calc_save()
+			gnmdamax_glutamate_old=0
+			gampamax_glutamate_old=0
+			RGCsomaAP=new Vector()						
+			netcon=new NetCon(&cell.soma.v(0.5),nil)         //AP count	
+			netcon.record(RGCsomaAP)						
+			netcon.threshold=-10
+			
+			for numsyn=10,10{
+				recV2.mul(numsyn)
+				run_calc_save()
+				print RGCsomaAP.size()
+				recV2.mul(1/numsyn)
+			}
+		}
+		
+		if (exptype==4){//run on all dendrites
+			objref RGCsomaAP,netcon,nil						
+			RGCsomaAP=new Vector()						
+			netcon=new NetCon(&cell.soma.v(0.5),nil)         //AP count	
+			netcon.record(RGCsomaAP)						
+			netcon.threshold=-10		
+			objref randD
+			randD=new Random()		
+			randD.ACG(randomseed)
+			randomseed=randomseed+1
+			//placedx=randD.uniform(0,dendgrouplist.count())
+			randD.lognormal(20,5000)
+			strdef st1
+			//print placedx
+			//for (numsyn=1;numsyn<50;numsyn=numsyn+10){
+			for numsyn=1,40{
+				sum=0
+				for subtreecount1=0,dendgrouplist.count()-1{
+					placex=numsyn//randD.repick()
+					sum=sum+placex-placex%1
+					sprint(st1, "numINPUT%d=%d", subtreecount1,placex)				
+					execute(st1)
+				}			
+				//sprint(st1, "numINPUT%d=%d", placedx,numsyn)
+				//execute(st1)
+				//print st1
+				rebuild(0)
+				//gnmdamax_glutamate_old=0
+				//run_calc_save()
+				//saveV=cell.Vvec[cell.numdend].max()-e_pas
+				//gnmdamax_glutamate_old=gnmdamax
+				run_calc_save()
+				//print numsyn,saveV,cell.Vvec[cell.numdend].max()-e_pas
+				//print sum,saveV,cell.Vvec[cell.numdend].max()-e_pas
+				print cell.Vvec[cell.numdend].max()-e_pas
+				//print RGCsomaAP.size()
+			}
+		}
+		if (exptype==5){//run on selected dendrties
+			objref randD
+			randD=new Random()		
+			randD.ACG(randomseed)
+			randomseed=randomseed+1
+			placedx=1//randD.uniform(0,dendgrouplist.count())
+			//randD.lognormal(20,5000)
+			strdef st1
+			print placedx
+			for subtreecount1=0,dendgrouplist.count()-1{
+				sprint(st1, "numINPUT%d=0", subtreecount1)				
+				execute(st1)
+			}
+			for (numsyn=1;numsyn<150;numsyn=numsyn+5){
+				sprint(st1, "numINPUT%d=%d", placedx,numsyn)				
+				execute(st1)
+				rebuild(0)
+				//gnmdamax_glutamate_old=0
+				//run_calc_save()
+				//saveV=cell.Vvec[cell.numdend].max()-e_pas
+				//gnmdamax_glutamate_old=gnmdamax
+				run_calc_save()
+				//print numsyn,saveV,cell.Vvec[cell.numdend].max()-e_pas
+				print cell.Vvec[cell.numdend].max()-e_pas
+				//print sum,saveV,cell.Vvec[cell.numdend].max()-e_pas
+			}
+		}		
+		if (exptype==6){//calc summation between dends
+			objref randD,randDN
+			randD=new Random()
+			randDN=new Random()
+			randD.uniform(0,dendgrouplist.count())
+			//randDN.uniform(1,50)
+			randDN.lognormal(5,1000)
+			randD.ACG(randomseed)
+			randDN.ACG(randomseed+1)
+			for runi=1,100{
+				//first select active dends
+
+				//then run the simulation
+				for subtreecount1=0,dendgrouplist.count()-1{
+					sprint(st1, "numINPUT%d=0", subtreecount1)				
+					execute(st1)
+				}
+				for i=1,16{
+					found=1
+					while (found==1){
+						placed=randD.repick()				
+						placenum=randDN.repick()
+						if (placenum<1){placenum=1}
+						found=0
+						sprint(st1,"if (numINPUT%d>0){found=1}",placed)
+						execute(st1) 
+					}
+					//print "now",placed-placed%1,placenum-placenum%1
+					
+					sprint(st1, "numINPUT%d=%d", placed,placenum)				
+					execute(st1)	
+				}
+				rebuild(0)
+				strdef st1,printst
+				printst=""
+				countactive=0//
+				//print dendgrouplist.count()
+				for subtreecount1=0,dendgrouplist.count()-1{
+					sav=countactive
+					numd=0
+					sprint(st1, "if (numINPUT%d>0){countactive=countactive+1 numd=numINPUT%d}", subtreecount1,subtreecount1)				
+					execute(st1)
+					if (sav<countactive){
+						sprint(printst,"%s%d	%d	",printst,subtreecount1,numd)
+					}
+				}
+				if (countactive>0){
+					objref expected
+					expected=new Vector(tstop/dt+1)
+					expected.fill(0)
+					for eachdend=0,countactive-1{
+						dendcount=-1
+						for i=0,cell.Esyn.count()-1{
+							cell.Esyn.o(i).del=1e9
+						}
+						for subtreecount1=0,dendgrouplist.count()-1{
+							
+							sprint(st1, "if (numINPUT%d>0){dendcount=dendcount+1}", subtreecount1)				
+							execute(st1)
+
+							if (dendcount==eachdend){//on the right branch
+								for i=0,cell.Esyn.count()-1{
+									if (cell.Esyn.o(i).dend==subtreecount1){
+										cell.Esyn.o(i).del=vectimes.x[cell.Esyn.o(i).dend]
+									}
+								}
+								//
+								
+							}
+						}							
+						
+						run_calc_save()
+						//print expected.size(),cell.Vvec[cell.numdend].size()
+						expected.add(cell.Vvec[cell.numdend])
+						expected.add(-e_pas)
+					}
+					
+					for i=0,cell.Esyn.count()-1{
+						cell.Esyn.o(i).del=vectimes.x[cell.Esyn.o(i).dend]
+					}
+					run_calc_save()
+					sprint(printst,"%s	%g	%g\n",printst,expected.max(),cell.Vvec[cell.numdend].max()-e_pas)
+					fs.printf("%s",printst)
+				}
+			}
+		}	
+		
+		fs.close()
+		fs2.close()
+		fs3.close()
+		fs4.close()
+		fs4.close()

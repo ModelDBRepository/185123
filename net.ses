@@ -1,0 +1,55 @@
+{load_file("nrngui.hoc")}
+objectvar save_window_, rvp_
+objectvar scene_vector_[6]
+objectvar ocbox_, ocbox_list_, scene_, scene_list_
+{ocbox_list_ = new List()  scene_list_ = new List()}
+{pwman_place(0,0,0)}
+
+//Begin PointProcessGroupManager
+{
+load_file("pointgrp.hoc")
+}
+{
+ocbox_ = new PointProcessGroupManager(0)
+}
+{object_push(ocbox_)}
+{
+ms = new MechanismStandard("IClamp")
+ms.set("del", 0, 0)
+ms.set("dur", 0, 0)
+ms.set("amp", 0, 0)
+mnews("IClamp", ms)
+select(0)
+execute("celltemplate[0].soma ocbox_.move(0.5)")
+ms = new MechanismStandard("OClamp")
+ms.set("rs", 25, 0)
+ms.set("on", 0, 0)
+ms.set("off", 600, 0)
+ms.set("vc", 30, 0)
+ms.set("switched_on", 0, 0)
+mnews("OClamp", ms)
+select(1)
+execute("celltemplate[0].soma ocbox_.move(0.5)")
+}
+{object_pop() doNotify()}
+{
+ocbox_ = ocbox_.v1
+ocbox_.map("PointProcessGroupManager", 986, 644, 545.4, 316.8)
+}
+objref ocbox_
+//End PointProcessGroupManager
+
+
+{
+save_window_ = new Graph(0)
+save_window_.size(-10,620,0.0162833,0.834117)
+scene_vector_[5] = save_window_
+{save_window_.view(-10, 0.0162833, 630, 0.817833, 1462, 78, 300.6, 200.8)}
+graphList[1].append(save_window_)
+save_window_.save_name("graphList[1].")
+save_window_.addexpr("OClamp[0].i", 1, 1, 0.8, 0.9, 2)
+save_window_.addexpr("IClamp[0].i", 1, 1, 0.8, 0.9, 2)
+
+}
+objectvar scene_vector_[1]
+{doNotify()}
